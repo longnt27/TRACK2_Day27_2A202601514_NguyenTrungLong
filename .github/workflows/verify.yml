@@ -1,9 +1,6 @@
 name: Verify Lab 27
 
 on:
-  push:
-    branches:
-      - implement/day27-reliability
   pull_request:
     branches:
       - main
@@ -44,7 +41,7 @@ jobs:
       - run: make reset
       - run: make gx
 
-  fault-scenarios:
+  baseline-and-faults:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +50,20 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: pip install -r requirements.txt
+
+      - name: Healthy baseline stays healthy
+        run: |
+          make reset
+          make baseline
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('reports/latest_metrics.json').read_text())
+          assert report['critical_contract_failures'] == 0, report
+          assert report['row_count_anomaly']['is_anomaly'] is False, report
+          assert report['order_freshness']['is_anomaly'] is False, report
+          assert report['kb_freshness']['is_anomaly'] is False, report
+          PY
 
       - name: Duplicate primary key is detected
         run: |
@@ -87,5 +98,5 @@ jobs:
           import json
           from pathlib import Path
           report = json.loads(Path('reports/latest_metrics.json').read_text())
-          assert report.get('kb_freshness', {}).get('is_anomaly') is True, report
+          assert report['kb_freshness']['is_anomaly'] is True, report
           PY
