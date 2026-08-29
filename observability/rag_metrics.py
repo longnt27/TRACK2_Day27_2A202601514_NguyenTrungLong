@@ -4,12 +4,12 @@ from typing import Any, Iterable
 
 import numpy as np
 
-from observability.anomaly import zscore_detector
+from observability.anomaly import detect_anomaly
+from observability.distribution import detect_distribution_shift
 
 
 def approximate_token_lengths(texts: Iterable[str]) -> list[int]:
-    # Deliberately simple proxy; no tokenizer/model download needed.
-    return [len(str(t).split()) for t in texts]
+    return [len(str(text).split()) for text in texts]
 
 
 def detect_text_length_shift(
@@ -20,7 +20,13 @@ def detect_text_length_shift(
 ) -> dict[str, Any]:
     lengths = approximate_token_lengths(current_texts)
     current_mean = float(np.mean(lengths)) if lengths else 0.0
-    result = zscore_detector(current_mean, baseline_batch_means, threshold=threshold)
+    result = detect_anomaly(
+        current_mean,
+        baseline_batch_means,
+        method="auto",
+        threshold=threshold,
+        context={"metric_name": "mean_text_length"},
+    )
     result["metric"] = "mean_text_length"
     result["current_mean"] = current_mean
     return result
@@ -29,9 +35,7 @@ def detect_text_length_shift(
 def detect_embedding_norm_shift(
     current_norms: Iterable[float], baseline_norms: Iterable[float]
 ) -> dict[str, Any]:
-    """TODO(student): implement embedding-space drift signal.
-
-    No embedding model is required for the starter lab. Hidden evaluation can
-    feed precomputed norms/similarities through this stable interface.
-    """
-    return {"is_anomaly": False, "score": 0.0, "method": "not_implemented"}
+    result = detect_distribution_shift(current_norms, baseline_norms, ratio_threshold=3.0)
+    result["metric"] = "embedding_norm"
+    result["method"] = f"embedding_norm:{result['method']}"
+    return result

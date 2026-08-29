@@ -1,14 +1,12 @@
--- NOTE: This model is intentionally simple. If the customer dimension has more
--- than one active row per customer, the join can inflate revenue without a SQL
--- error. Students should add tests/unit tests that expose this failure mode.
-
 with completed_orders as (
     select *
     from {{ ref('stg_orders') }}
     where status = 'completed'
 ),
 active_customers as (
-    select *
+    -- SCD dimensions occasionally contain duplicate active versions during a
+    -- bad load. Revenue grain must not multiply because of that dimension bug.
+    select distinct customer_id
     from {{ ref('stg_customers') }}
     where is_active = true
 )

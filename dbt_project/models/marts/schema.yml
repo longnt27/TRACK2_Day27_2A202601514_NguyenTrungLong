@@ -5,6 +5,11 @@ models:
     description: Daily completed-order revenue for the CEO dashboard.
     columns:
       - name: order_date
+        description: Daily grain of the mart.
+        data_tests:
+          - not_null
+          - unique
+      - name: completed_order_rows
         data_tests:
           - not_null
       - name: daily_revenue
