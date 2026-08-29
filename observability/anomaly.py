@@ -68,6 +68,37 @@ def mad_detector(current: float, history: Iterable[float], threshold: float = 3.
     }
 
 
+def _finalize_auto_result(
+    result: dict[str, Any],
+    context: dict[str, Any],
+    *,
+    segment_used: bool,
+) -> dict[str, Any]:
+    """Apply context policy after the statistical detector has produced a score.
+
+    `known_event` describes an expected operational change. In auto mode we keep
+    the score for diagnosis, but suppress the actionable anomaly verdict so a
+    planned event does not page as an unexplained incident.
+    """
+    if context.get("day_of_week") is not None:
+        result["reason"] += f"; day_of_week={context['day_of_week']}"
+        if not segment_used:
+            result["reason"] += "; no_segment_history"
+
+    if context.get("metric_name"):
+        result["metric"] = str(context["metric_name"])
+
+    known_event = context.get("known_event")
+    if known_event:
+        was_anomaly = bool(result.get("is_anomaly", False))
+        result["reason"] += f"; known_event={known_event}"
+        if was_anomaly:
+            result["is_anomaly"] = False
+            result["reason"] += "; actionable_alert_suppressed=true"
+
+    return result
+
+
 def detect_anomaly(
     current: float,
     history: Iterable[float],
@@ -91,12 +122,14 @@ def detect_anomaly(
     if segment_history is not None:
         segment_values = _values(segment_history)
         if segment_values.size >= 3:
-            result = mad_detector(current, segment_values) if segment_values.size >= 5 else zscore_detector(current, segment_values, threshold=threshold)
+            result = (
+                mad_detector(current, segment_values)
+                if segment_values.size >= 5
+                else zscore_detector(current, segment_values, threshold=threshold)
+            )
             result["method"] = f"auto:segment_{result['method']}"
             result["reason"] += f"; segment_n={segment_values.size}"
-            if context.get("known_event"):
-                result["reason"] += f"; known_event={context['known_event']}"
-            return result
+            return _finalize_auto_result(result, context, segment_used=True)
 
     values = _values(history_values)
     if values.size >= 5:
@@ -106,10 +139,4 @@ def detect_anomaly(
         result = zscore_detector(current, values, threshold=threshold)
         result["method"] = "auto:zscore"
 
-    if context.get("day_of_week") is not None:
-        result["reason"] += f"; day_of_week={context['day_of_week']}; no_segment_history"
-    if context.get("metric_name"):
-        result["metric"] = str(context["metric_name"])
-    if context.get("known_event"):
-        result["reason"] += f"; known_event={context['known_event']}"
-    return result
+    return _finalize_auto_result(result, context, segment_used=False)
