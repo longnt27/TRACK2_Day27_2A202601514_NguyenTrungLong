@@ -60,6 +60,24 @@ def test_auto_anomaly_uses_same_segment_history():
     assert "segment" in result["method"]
 
 
+def test_auto_known_event_suppresses_alert_but_keeps_diagnostic_score():
+    history = [240, 245, 250, 255, 260, 248]
+    raw = detect_metric(400, history, method="auto")
+    explained = detect_metric(
+        400,
+        history,
+        method="auto",
+        context={"known_event": "scheduled_load_test", "metric_name": "row_count"},
+    )
+
+    assert raw["is_anomaly"] is True
+    assert explained["is_anomaly"] is False
+    assert explained["score"] == raw["score"]
+    assert explained["metric"] == "row_count"
+    assert "known_event=scheduled_load_test" in explained["reason"]
+    assert "actionable_alert_suppressed=true" in explained["reason"]
+
+
 def test_zero_variance_baseline_still_detects_departure():
     assert detect_metric(800, [100, 100, 100, 100, 100], method="auto")["is_anomaly"] is True
 

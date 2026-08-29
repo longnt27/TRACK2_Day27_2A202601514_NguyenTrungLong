@@ -33,3 +33,11 @@ This log records the important engineering decisions rather than copying the con
 - **Evidence/test:** The lab guide explicitly requires incident answers to come from contracts, dbt tests, anomaly signals, lineage, SLOs, and justified raw-data exploration.
 - **Accept / reject / revise:** **Accept.**
 - **Why:** Invented root cause, timestamps, or recovery evidence would undermine the reliability exercise itself.
+
+## Decision 5 — Separate anomaly evidence from alert action for known events
+- **Hypothesis:** A planned or otherwise known event can legitimately produce an anomalous statistical score while not representing an unexplained incident that should page an operator.
+- **Prompt / request to agent:** Compare the stable API behavior against a 20/20 submission as a behavioral reference only, identify the missing edge case, and design an independent fix without copying implementation code.
+- **Agent proposal:** Keep the detector score and method unchanged for diagnosis, then apply a context policy in `auto` mode: if `known_event` is truthy and the raw detector verdict is anomalous, suppress only the actionable `is_anomaly` flag and annotate the reason. Apply the same context finalization to segmented and non-segmented paths.
+- **Evidence/test:** Added a regression case using a distinct row-count history and a scheduled load test. The unexplained spike must remain anomalous; the identical spike with `known_event` must retain the same score while returning `is_anomaly=False` and explicit suppression metadata in the reason.
+- **Accept / reject / revise:** **Accept.**
+- **Why:** This avoids alert fatigue without erasing observability evidence, and it directly uses the `known_event` field already exposed by the stable API contract.
