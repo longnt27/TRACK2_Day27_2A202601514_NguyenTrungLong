@@ -1,0 +1,91 @@
+name: Verify Lab 27
+
+on:
+  push:
+    branches:
+      - implement/day27-reliability
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest tests_public -q
+
+  dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: make reset
+      - run: make dbt
+
+  great-expectations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: make reset
+      - run: make gx
+
+  fault-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Duplicate primary key is detected
+        run: |
+          make reset
+          python scripts/inject_fault.py duplicate_pk
+          make baseline
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('reports/latest_metrics.json').read_text())
+          assert report['critical_contract_failures'] > 0, report
+          PY
+
+      - name: Volume drop is detected
+        run: |
+          make reset
+          python scripts/inject_fault.py volume_drop
+          make baseline
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('reports/latest_metrics.json').read_text())
+          assert report['row_count_anomaly']['is_anomaly'] is True, report
+          PY
+
+      - name: Stale KB is detected
+        run: |
+          make reset
+          python scripts/inject_fault.py stale_kb
+          make baseline
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('reports/latest_metrics.json').read_text())
+          assert report.get('kb_freshness', {}).get('is_anomaly') is True, report
+          PY
